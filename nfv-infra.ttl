@@ -3,7 +3,14 @@
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix swrl: <http://www.w3.org/2003/11/swrl#> .
+@prefix swrlb: <http://www.w3.org/2003/11/swrlb#> .
 
+<http://example.org/nfv-infra#> rdf:type owl:Ontology ;
+    owl:versionInfo "1.0 - Semantic-Aware VNF Placement Ontology (Phan et al., 2026)" ;
+    rdfs:comment "OWL 2 EL ontology for RDF-based VNF placement in 5G/6G networks" .
+
+# CLASSES
 :Server rdf:type owl:Class .
 :EdgeServer rdf:type owl:Class ; rdfs:subClassOf :Server .
 :CoreServer rdf:type owl:Class ; rdfs:subClassOf :Server .
@@ -14,7 +21,10 @@
 :LowLatencyZone rdf:type owl:Class ; rdfs:subClassOf :Zone .
 :CoreZone rdf:type owl:Class ; rdfs:subClassOf :Zone .
 :SecurityDomain rdf:type owl:Class ; rdfs:subClassOf :Zone .
+:Node rdf:type owl:Class ; rdfs:subClassOf :Server .
+:IncompatibleNode rdf:type owl:Class .
 
+# PROPERTIES
 :hasAvailableCPU rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
 :hasAvailableMemory rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
 :hasBandwidth rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
@@ -25,117 +35,71 @@
 :requiresHardwareAccel rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:boolean .
 :requiresLatency rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:integer .
 :belongsToSecurityDomain rdf:type owl:ObjectProperty ; rdfs:domain :VNF ; rdfs:range :SecurityDomain .
+:mustPlaceOn rdf:type owl:ObjectProperty ; rdfs:domain :VNF ; rdfs:range :Server .
+:lacksCapability rdf:type owl:ObjectProperty ; rdfs:domain :Node ; rdfs:range :Node .
 
-:EdgeNode1 rdf:type :EdgeServer ;
-    :hasAvailableCPU 8 ;
-    :hasAvailableMemory 16384 ;
-    :hasBandwidth 1000 ;
-    :hasHardwareAccel true ;
-    :hasLatency 2 ;
-    :locatedIn :LowLatencyZoneA .
+# DL AXIOM: IncompatibleNode (Fixed)
+:IncompatibleNode owl:equivalentClass [
+    rdf:type owl:Class ;
+    owl:intersectionOf (
+        :Node
+        [ rdf:type owl:Class ;
+          owl:unionOf (
+              [ rdf:type owl:Restriction ; owl:onProperty :hasLatency ; owl:hasValue "high" ]
+              [ rdf:type owl:Restriction ; owl:onProperty :lacksCapability ; owl:someValuesFrom :HardwareAcceleratedVNF ]
+          )
+        ]
+    )
+] .
 
-:EdgeNode2 rdf:type :EdgeServer ;
-    :hasAvailableCPU 4 ;
-    :hasAvailableMemory 8192 ;
-    :hasBandwidth 500 ;
-    :hasHardwareAccel true ;
-    :hasLatency 3 ;
-    :locatedIn :LowLatencyZoneA .
+# SWRL RULES
+:rule1 rdf:type swrl:Imp ;
+    swrl:body [ rdf:type swrl:AtomList ; rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :LowLatencyVNF ; swrl:argument1 :?v ] ;
+    rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresLatency ; swrl:argument1 :?v ; swrl:argument2 :?l ] ;
+    rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
+    rdf:rest [ rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :locatedIn ; swrl:argument1 :?n ; swrl:argument2 :?z ] ;
+    rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :LowLatencyZone ; swrl:argument1 :?z ] ;
+    rdf:rest [ rdf:first [ rdf:type swrl:BuiltinAtom ; swrl:builtin swrlb:lessThanOrEqual ; swrl:arguments ( :?l 5 ) ] ;
+    rdf:rest rdf:nil ] ] ] ] ] ] ;
+    swrl:head [ rdf:type swrl:AtomList ; rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :mustPlaceOn ; swrl:argument1 :?v ; swrl:argument2 :?n ] ; rdf:rest rdf:nil ] .
 
-:EdgeNode3 rdf:type :EdgeServer ;
-    :hasAvailableCPU 12 ;
-    :hasAvailableMemory 32768 ;
-    :hasBandwidth 2000 ;
-    :hasHardwareAccel false ;
-    :hasLatency 1 ;
-    :locatedIn :LowLatencyZoneB .
+# SWRL Rule 2: HardwareAcceleratedVNF yêu cầu phần cứng (HardwareAccel = true)
+# Nếu VNF yêu cầu tăng tốc phần cứng mà Server không cung cấp, thì Server đó là IncompatibleNode.
+:rule2 rdf:type swrl:Imp ;
+    swrl:body [ rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :HardwareAcceleratedVNF ; swrl:argument1 :?v ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresHardwareAccel ; swrl:argument1 :?v ; swrl:argument2 true ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :hasHardwareAccel ; swrl:argument1 :?n ; swrl:argument2 false ] ;
+        rdf:rest rdf:nil ] ] ] ] ;
+    swrl:head [ rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :IncompatibleNode ; swrl:argument1 :?n ] ;
+        rdf:rest rdf:nil ] .
 
-:EdgeNode4 rdf:type :EdgeServer ;
-    :hasAvailableCPU 6 ;
-    :hasAvailableMemory 12288 ;
-    :hasBandwidth 800 ;
-    :hasHardwareAccel true ;
-    :hasLatency 4 ;
-    :locatedIn :LowLatencyZoneB .
+# SWRL Rule 3: Security isolation
+# Nếu VNF thuộc một miền bảo mật mà Server không nằm trong đó, Server đó là IncompatibleNode.
+:rule3 rdf:type swrl:Imp ;
+    swrl:body [ rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :VNF ; swrl:argument1 :?v ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :belongsToSecurityDomain ; swrl:argument1 :?v ; swrl:argument2 :?d1 ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :locatedIn ; swrl:argument1 :?n ; swrl:argument2 :?d2 ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:BuiltinAtom ; swrl:builtin swrlb:notEqual ; swrl:arguments ( :?d1 :?d2 ) ] ;
+        rdf:rest rdf:nil ] ] ] ] ] ;
+    swrl:head [ rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :IncompatibleNode ; swrl:argument1 :?n ] ;
+        rdf:rest rdf:nil ] .
 
-:CoreNode1 rdf:type :CoreServer ;
-    :hasAvailableCPU 16 ;
-    :hasAvailableMemory 65536 ;
-    :hasBandwidth 10000 ;
-    :hasHardwareAccel false ;
-    :hasLatency 15 ;
-    :locatedIn :CoreZone .
 
-:CoreNode2 rdf:type :CoreServer ;
-    :hasAvailableCPU 24 ;
-    :hasAvailableMemory 131072 ;
-    :hasBandwidth 20000 ;
-    :hasHardwareAccel true ;
-    :hasLatency 20 ;
-    :locatedIn :CoreZone .
-
-:CoreNode3 rdf:type :CoreServer ;
-    :hasAvailableCPU 8 ;
-    :hasAvailableMemory 32768 ;
-    :hasBandwidth 5000 ;
-    :hasHardwareAccel false ;
-    :hasLatency 12 ;
-    :locatedIn :CoreZone .
-
-:CoreNode4 rdf:type :CoreServer ;
-    :hasAvailableCPU 32 ;
-    :hasAvailableMemory 262144 ;
-    :hasBandwidth 40000 ;
-    :hasHardwareAccel false ;
-    :hasLatency 18 ;
-    :locatedIn :CoreZone .
-
-:EdgeNode5 rdf:type :EdgeServer ;
-    :hasAvailableCPU 10 ;
-    :hasAvailableMemory 24576 ;
-    :hasBandwidth 1500 ;
-    :hasHardwareAccel true ;
-    :hasLatency 2 ;
-    :locatedIn :LowLatencyZoneA .
-
-:EdgeNode6 rdf:type :EdgeServer ;
-    :hasAvailableCPU 5 ;
-    :hasAvailableMemory 4096 ;
-    :hasBandwidth 600 ;
-    :hasHardwareAccel false ;
-    :hasLatency 5 ;
-    :locatedIn :LowLatencyZoneB .
-
-:CoreNode5 rdf:type :CoreServer ;
-    :hasAvailableCPU 20 ;
-    :hasAvailableMemory 98304 ;
-    :hasBandwidth 15000 ;
-    :hasHardwareAccel true ;
-    :hasLatency 25 ;
-    :locatedIn :CoreZone .
-
-:CoreNode6 rdf:type :CoreServer ;
-    :hasAvailableCPU 16 ;
-    :hasAvailableMemory 65536 ;
-    :hasBandwidth 8000 ;
-    :hasHardwareAccel false ;
-    :hasLatency 14 ;
-    :locatedIn :CoreZone .
-
-:FirewallVNF rdf:type :LowLatencyVNF ;
-    :requiresCPU 4 ;
-    :requiresHardwareAccel true ;
-    :requiresLatency 5 ;
-    :belongsToSecurityDomain :TrustedDomain .
-
-:LoadBalancerVNF rdf:type :HardwareAcceleratedVNF ;
-    :requiresCPU 8 ;
-    :requiresHardwareAccel true ;
-    :requiresLatency 3 ;
-    :belongsToSecurityDomain :TrustedDomain .
-
-:LowLatencyZoneA rdf:type :LowLatencyZone .
-:LowLatencyZoneB rdf:type :LowLatencyZone .
-:CoreZone rdf:type :CoreZone .
-:TrustedDomain rdf:type :SecurityDomain .
-:UntrustedDomain rdf:type :SecurityDomain .
+# SWRL Rule 4: Phát hiện Node bị quá tải (Insufficient CPU)
+:rule4 rdf:type swrl:Imp ;
+    swrl:body [ rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :VNF ; swrl:argument1 :?v ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresCPU ; swrl:argument1 :?v ; swrl:argument2 :?reqCPU ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :hasAvailableCPU ; swrl:argument1 :?n ; swrl:argument2 :?availCPU ] ;
+        rdf:rest [ rdf:first [ rdf:type swrl:BuiltinAtom ; swrl:builtin swrlb:greaterThan ; swrl:arguments ( :?reqCPU :?availCPU ) ] ;
+        rdf:rest rdf:nil ] ] ] ] ] ;
+    swrl:head [ rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :IncompatibleNode ; swrl:argument1 :?n ] ;
+        rdf:rest rdf:nil ] .        

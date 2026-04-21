@@ -10,14 +10,15 @@ from rdflib import Graph
 import pandas as pd
 
 # ====================== 1. LOAD ONTOLOGY ======================
-print("Loading nfv-infra.owl ...")
+print("Loading nfv-infra.ttl ...")
 try:
-    # Thêm format="turtle" để tránh lỗi tự động nhận diện định dạng
-    onto = get_ontology("nfv-infra.owl").load(format="turtle") 
+    # BẮT BUỘC chỉ định format="turtle" vì nội dung file là Turtle
+    onto = get_ontology("nfv-infra.ttl").load(format="turtle") 
     print("Ontology loaded successfully!")
 except Exception as e:
     print(f"Error loading ontology: {e}")
-    exit() # Dừng chương trình nếu không load được ontology để tránh NameError
+    # Kiểm tra xem file có đang bị lỗi Encoding hay không
+    exit()
 
 # Kiểm tra lại biến onto trước khi dùng
 if 'onto' in locals():
