@@ -10,11 +10,19 @@ from rdflib import Graph
 import pandas as pd
 
 # ====================== 1. LOAD ONTOLOGY ======================
-print("Loading nfv-infra.ttl ...")
-onto = get_ontology("nfv-infra.ttl").load(format="turtle")
-print(f"Ontology loaded successfully!")
-print(f"   Classes: {len(list(onto.classes()))}")
-print(f"   Individuals: {len(list(onto.individuals()))}")
+print("Loading nfv-infra.owl ...")
+try:
+    # Thêm format="turtle" để tránh lỗi tự động nhận diện định dạng
+    onto = get_ontology("nfv-infra.owl").load(format="turtle") 
+    print("Ontology loaded successfully!")
+except Exception as e:
+    print(f"Error loading ontology: {e}")
+    exit() # Dừng chương trình nếu không load được ontology để tránh NameError
+
+# Kiểm tra lại biến onto trước khi dùng
+if 'onto' in locals():
+    print(f"   Classes: {len(list(onto.classes()))}")
+    print(f"   Individuals: {len(list(onto.individuals()))}")
 
 # ====================== 2. RUN REASONING (HermiT) ======================
 print("\n🧠 Running HermiT reasoner (OWL 2 EL profile)...")
