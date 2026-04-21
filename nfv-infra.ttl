@@ -1,0 +1,141 @@
+@prefix : <http://example.org/nfv-infra#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:Server rdf:type owl:Class .
+:EdgeServer rdf:type owl:Class ; rdfs:subClassOf :Server .
+:CoreServer rdf:type owl:Class ; rdfs:subClassOf :Server .
+:VNF rdf:type owl:Class .
+:LowLatencyVNF rdf:type owl:Class ; rdfs:subClassOf :VNF .
+:HardwareAcceleratedVNF rdf:type owl:Class ; rdfs:subClassOf :VNF .
+:Zone rdf:type owl:Class .
+:LowLatencyZone rdf:type owl:Class ; rdfs:subClassOf :Zone .
+:CoreZone rdf:type owl:Class ; rdfs:subClassOf :Zone .
+:SecurityDomain rdf:type owl:Class ; rdfs:subClassOf :Zone .
+
+:hasAvailableCPU rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
+:hasAvailableMemory rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
+:hasBandwidth rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
+:hasHardwareAccel rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:boolean .
+:hasLatency rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
+:locatedIn rdf:type owl:ObjectProperty ; rdfs:domain :Server ; rdfs:range :Zone .
+:requiresCPU rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:integer .
+:requiresHardwareAccel rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:boolean .
+:requiresLatency rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:integer .
+:belongsToSecurityDomain rdf:type owl:ObjectProperty ; rdfs:domain :VNF ; rdfs:range :SecurityDomain .
+
+:EdgeNode1 rdf:type :EdgeServer ;
+    :hasAvailableCPU 8 ;
+    :hasAvailableMemory 16384 ;
+    :hasBandwidth 1000 ;
+    :hasHardwareAccel true ;
+    :hasLatency 2 ;
+    :locatedIn :LowLatencyZoneA .
+
+:EdgeNode2 rdf:type :EdgeServer ;
+    :hasAvailableCPU 4 ;
+    :hasAvailableMemory 8192 ;
+    :hasBandwidth 500 ;
+    :hasHardwareAccel true ;
+    :hasLatency 3 ;
+    :locatedIn :LowLatencyZoneA .
+
+:EdgeNode3 rdf:type :EdgeServer ;
+    :hasAvailableCPU 12 ;
+    :hasAvailableMemory 32768 ;
+    :hasBandwidth 2000 ;
+    :hasHardwareAccel false ;
+    :hasLatency 1 ;
+    :locatedIn :LowLatencyZoneB .
+
+:EdgeNode4 rdf:type :EdgeServer ;
+    :hasAvailableCPU 6 ;
+    :hasAvailableMemory 12288 ;
+    :hasBandwidth 800 ;
+    :hasHardwareAccel true ;
+    :hasLatency 4 ;
+    :locatedIn :LowLatencyZoneB .
+
+:CoreNode1 rdf:type :CoreServer ;
+    :hasAvailableCPU 16 ;
+    :hasAvailableMemory 65536 ;
+    :hasBandwidth 10000 ;
+    :hasHardwareAccel false ;
+    :hasLatency 15 ;
+    :locatedIn :CoreZone .
+
+:CoreNode2 rdf:type :CoreServer ;
+    :hasAvailableCPU 24 ;
+    :hasAvailableMemory 131072 ;
+    :hasBandwidth 20000 ;
+    :hasHardwareAccel true ;
+    :hasLatency 20 ;
+    :locatedIn :CoreZone .
+
+:CoreNode3 rdf:type :CoreServer ;
+    :hasAvailableCPU 8 ;
+    :hasAvailableMemory 32768 ;
+    :hasBandwidth 5000 ;
+    :hasHardwareAccel false ;
+    :hasLatency 12 ;
+    :locatedIn :CoreZone .
+
+:CoreNode4 rdf:type :CoreServer ;
+    :hasAvailableCPU 32 ;
+    :hasAvailableMemory 262144 ;
+    :hasBandwidth 40000 ;
+    :hasHardwareAccel false ;
+    :hasLatency 18 ;
+    :locatedIn :CoreZone .
+
+:EdgeNode5 rdf:type :EdgeServer ;
+    :hasAvailableCPU 10 ;
+    :hasAvailableMemory 24576 ;
+    :hasBandwidth 1500 ;
+    :hasHardwareAccel true ;
+    :hasLatency 2 ;
+    :locatedIn :LowLatencyZoneA .
+
+:EdgeNode6 rdf:type :EdgeServer ;
+    :hasAvailableCPU 5 ;
+    :hasAvailableMemory 4096 ;
+    :hasBandwidth 600 ;
+    :hasHardwareAccel false ;
+    :hasLatency 5 ;
+    :locatedIn :LowLatencyZoneB .
+
+:CoreNode5 rdf:type :CoreServer ;
+    :hasAvailableCPU 20 ;
+    :hasAvailableMemory 98304 ;
+    :hasBandwidth 15000 ;
+    :hasHardwareAccel true ;
+    :hasLatency 25 ;
+    :locatedIn :CoreZone .
+
+:CoreNode6 rdf:type :CoreServer ;
+    :hasAvailableCPU 16 ;
+    :hasAvailableMemory 65536 ;
+    :hasBandwidth 8000 ;
+    :hasHardwareAccel false ;
+    :hasLatency 14 ;
+    :locatedIn :CoreZone .
+
+:FirewallVNF rdf:type :LowLatencyVNF ;
+    :requiresCPU 4 ;
+    :requiresHardwareAccel true ;
+    :requiresLatency 5 ;
+    :belongsToSecurityDomain :TrustedDomain .
+
+:LoadBalancerVNF rdf:type :HardwareAcceleratedVNF ;
+    :requiresCPU 8 ;
+    :requiresHardwareAccel true ;
+    :requiresLatency 3 ;
+    :belongsToSecurityDomain :TrustedDomain .
+
+:LowLatencyZoneA rdf:type :LowLatencyZone .
+:LowLatencyZoneB rdf:type :LowLatencyZone .
+:CoreZone rdf:type :CoreZone .
+:TrustedDomain rdf:type :SecurityDomain .
+:UntrustedDomain rdf:type :SecurityDomain .
