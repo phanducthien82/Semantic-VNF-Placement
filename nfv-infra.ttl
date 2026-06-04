@@ -52,17 +52,23 @@
     )
 ] .
 
-# SWRL RULES
+# SWRL Rule 1 
 :rule1 rdf:type swrl:Imp ;
-    swrl:body [ rdf:type swrl:AtomList ; rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :LowLatencyVNF ; swrl:argument1 :?v ] ;
-    rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresLatency ; swrl:argument1 :?v ; swrl:argument2 :?l ] ;
-    rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
-    rdf:rest [ rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :locatedIn ; swrl:argument1 :?n ; swrl:argument2 :?z ] ;
-    rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :LowLatencyZone ; swrl:argument1 :?z ] ;
-    rdf:rest [ rdf:first [ rdf:type swrl:BuiltinAtom ; swrl:builtin swrlb:lessThanOrEqual ; swrl:arguments ( :?l 5 ) ] ;
-    rdf:rest rdf:nil ] ] ] ] ] ] ;
-    swrl:head [ rdf:type swrl:AtomList ; rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :mustPlaceOn ; swrl:argument1 :?v ; swrl:argument2 :?n ] ; rdf:rest rdf:nil ] .
-
+    swrl:body [
+        rdf:type swrl:AtomList ;
+        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :LowLatencyVNF ; swrl:argument1 :v ] ;
+        rdf:rest [
+            rdf:type swrl:AtomList ;
+            rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresLatency ; swrl:argument1 :v ; swrl:argument2 :l ] ;
+            rdf:rest [
+                rdf:type swrl:AtomList ;
+                rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :n ] ;
+                rdf:rest rdf:nil
+            ]
+        ]
+    ] ;
+    swrl:head [ rdf:type swrl:AtomList ; rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :mustPlaceOn ; swrl:argument1 :v ; swrl:argument2 :n ] ; rdf:rest rdf:nil ] .
+    
 # SWRL Rule 2: HardwareAcceleratedVNF yêu cầu phần cứng (HardwareAccel = true)
 # Nếu VNF yêu cầu tăng tốc phần cứng mà Server không cung cấp, thì Server đó là IncompatibleNode.
 :rule2 rdf:type swrl:Imp ;
