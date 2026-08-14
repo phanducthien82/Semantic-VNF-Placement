@@ -1,111 +1,111 @@
-@prefix : <http://example.org/nfv-infra#> .
+@prefix : <http://example.org/nfv#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix swrl: <http://www.w3.org/2003/11/swrl#> .
 @prefix swrlb: <http://www.w3.org/2003/11/swrlb#> .
+@base <http://example.org/nfv> .
 
-<http://example.org/nfv-infra#> rdf:type owl:Ontology ;
-    owl:versionInfo "1.0 - Semantic-Aware VNF Placement Ontology (Phan et al., 2026)" ;
-    rdfs:comment "OWL 2 EL ontology for RDF-based VNF placement in 5G/6G networks" .
+<http://example.org/nfv> rdf:type owl:Ontology ;
+                         rdfs:comment "Semantic VNF Placement Ontology - Updated for IEEE TNSM Revision" .
 
-# CLASSES
-:Server rdf:type owl:Class .
-:EdgeServer rdf:type owl:Class ; rdfs:subClassOf :Server .
-:CoreServer rdf:type owl:Class ; rdfs:subClassOf :Server .
-:VNF rdf:type owl:Class .
-:LowLatencyVNF rdf:type owl:Class ; rdfs:subClassOf :VNF .
-:HardwareAcceleratedVNF rdf:type owl:Class ; rdfs:subClassOf :VNF .
-:Zone rdf:type owl:Class .
-:LowLatencyZone rdf:type owl:Class ; rdfs:subClassOf :Zone .
-:CoreZone rdf:type owl:Class ; rdfs:subClassOf :Zone .
-:SecurityDomain rdf:type owl:Class ; rdfs:subClassOf :Zone .
-:Node rdf:type owl:Class ; rdfs:subClassOf :Server .
-:IncompatibleNode rdf:type owl:Class .
+#################################################################
+#    Classes
+#################################################################
 
-# PROPERTIES
-:hasAvailableCPU rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
-:hasAvailableMemory rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
-:hasBandwidth rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
-:hasHardwareAccel rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:boolean .
-:hasLatency rdf:type owl:DatatypeProperty ; rdfs:domain :Server ; rdfs:range xsd:integer .
-:locatedIn rdf:type owl:ObjectProperty ; rdfs:domain :Server ; rdfs:range :Zone .
-:requiresCPU rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:integer .
-:requiresHardwareAccel rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:boolean .
-:requiresLatency rdf:type owl:DatatypeProperty ; rdfs:domain :VNF ; rdfs:range xsd:integer .
-:belongsToSecurityDomain rdf:type owl:ObjectProperty ; rdfs:domain :VNF ; rdfs:range :SecurityDomain .
-:mustPlaceOn rdf:type owl:ObjectProperty ; rdfs:domain :VNF ; rdfs:range :Server .
-:lacksCapability rdf:type owl:ObjectProperty ; rdfs:domain :Node ; rdfs:range :Node .
+:Server rdf:type owl:Class ;
+        rdfs:comment "Any physical or virtual compute node" .
 
-# DL AXIOM: IncompatibleNode (Fixed)
-:IncompatibleNode owl:equivalentClass [
-    rdf:type owl:Class ;
-    owl:intersectionOf (
-        :Node
-        [ rdf:type owl:Class ;
-          owl:unionOf (
-              [ rdf:type owl:Restriction ; owl:onProperty :hasLatency ; owl:hasValue "high" ]
-              [ rdf:type owl:Restriction ; owl:onProperty :lacksCapability ; owl:someValuesFrom :HardwareAcceleratedVNF ]
-          )
-        ]
-    )
-] .
+:EdgeServer rdf:type owl:Class ;
+            rdfs:subClassOf :Server ;
+            rdfs:comment "Low-latency MEC edge node" .
 
-# SWRL Rule 1 
-:rule1 rdf:type swrl:Imp ;
-    swrl:body [
-        rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :LowLatencyVNF ; swrl:argument1 :v ] ;
-        rdf:rest [
-            rdf:type swrl:AtomList ;
-            rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresLatency ; swrl:argument1 :v ; swrl:argument2 :l ] ;
-            rdf:rest [
-                rdf:type swrl:AtomList ;
-                rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :n ] ;
-                rdf:rest rdf:nil
-            ]
-        ]
-    ] ;
-    swrl:head [ rdf:type swrl:AtomList ; rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :mustPlaceOn ; swrl:argument1 :v ; swrl:argument2 :n ] ; rdf:rest rdf:nil ] .
-    
-# SWRL Rule 2: HardwareAcceleratedVNF yêu cầu phần cứng (HardwareAccel = true)
-# Nếu VNF yêu cầu tăng tốc phần cứng mà Server không cung cấp, thì Server đó là IncompatibleNode.
-:rule2 rdf:type swrl:Imp ;
-    swrl:body [ rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :HardwareAcceleratedVNF ; swrl:argument1 :?v ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresHardwareAccel ; swrl:argument1 :?v ; swrl:argument2 true ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :hasHardwareAccel ; swrl:argument1 :?n ; swrl:argument2 false ] ;
-        rdf:rest rdf:nil ] ] ] ] ;
-    swrl:head [ rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :IncompatibleNode ; swrl:argument1 :?n ] ;
-        rdf:rest rdf:nil ] .
+:CoreServer rdf:type owl:Class ;
+            rdfs:subClassOf :Server ;
+            rdfs:comment "High-capacity core/cloud node" .
 
-# SWRL Rule 3: Security isolation
-# Nếu VNF thuộc một miền bảo mật mà Server không nằm trong đó, Server đó là IncompatibleNode.
-:rule3 rdf:type swrl:Imp ;
-    swrl:body [ rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :VNF ; swrl:argument1 :?v ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :belongsToSecurityDomain ; swrl:argument1 :?v ; swrl:argument2 :?d1 ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:ObjectPropertyAtom ; swrl:propertyPredicate :locatedIn ; swrl:argument1 :?n ; swrl:argument2 :?d2 ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:BuiltinAtom ; swrl:builtin swrlb:notEqual ; swrl:arguments ( :?d1 :?d2 ) ] ;
-        rdf:rest rdf:nil ] ] ] ] ] ;
-    swrl:head [ rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :IncompatibleNode ; swrl:argument1 :?n ] ;
-        rdf:rest rdf:nil ] .
+:VNF rdf:type owl:Class ;
+     rdfs:comment "Virtual Network Function instance" .
+
+:LowLatencyVNF rdf:type owl:Class ;
+               rdfs:subClassOf :VNF .
+
+:HardwareAcceleratedVNF rdf:type owl:Class ;
+                        rdfs:subClassOf :VNF .
+
+:Zone rdf:type owl:Class ;
+      rdfs:comment "Geographical or administrative zone" .
+
+:LowLatencyZone rdf:type owl:Class ;
+                rdfs:subClassOf :Zone .
+
+:SecurityDomain rdf:type owl:Class ;
+                rdfs:subClassOf :Zone ;
+                rdfs:comment "Isolated security/trust domain" .
+
+# --- BỔ SUNG CLASS LINK (Giải quyết phản biện Reviewer 3) ---
+:Link rdf:type owl:Class ;
+      rdfs:comment "Represents a physical substrate link between servers." .
 
 
-# SWRL Rule 4: Phát hiện Node bị quá tải (Insufficient CPU)
-:rule4 rdf:type swrl:Imp ;
-    swrl:body [ rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :VNF ; swrl:argument1 :?v ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :requiresCPU ; swrl:argument1 :?v ; swrl:argument2 :?reqCPU ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :Server ; swrl:argument1 :?n ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:DatavaluedPropertyAtom ; swrl:propertyPredicate :hasAvailableCPU ; swrl:argument1 :?n ; swrl:argument2 :?availCPU ] ;
-        rdf:rest [ rdf:first [ rdf:type swrl:BuiltinAtom ; swrl:builtin swrlb:greaterThan ; swrl:arguments ( :?reqCPU :?availCPU ) ] ;
-        rdf:rest rdf:nil ] ] ] ] ] ;
-    swrl:head [ rdf:type swrl:AtomList ;
-        rdf:first [ rdf:type swrl:ClassAtom ; swrl:classPredicate :IncompatibleNode ; swrl:argument1 :?n ] ;
-        rdf:rest rdf:nil ] .        
+#################################################################
+#    Object Properties
+#################################################################
+
+:locatedIn rdf:type owl:ObjectProperty ;
+           rdfs:domain :Server ;
+           rdfs:range :Zone .
+
+:belongsToSecurityDomain rdf:type owl:ObjectProperty ;
+                         rdfs:domain :VNF ;
+                         rdfs:range :SecurityDomain .
+
+# --- THAY THẾ IncompatibleNode BẰNG OBJECT PROPERTY (Giải quyết Paradox) ---
+:isIncompatibleWith rdf:type owl:ObjectProperty ;
+                    rdfs:domain :Server ;
+                    rdfs:range :VNF ;
+                    rdfs:comment "Indicates that a specific Server cannot host a specific VNF due to policy violations." .
+
+# --- BỔ SUNG LIÊN KẾT CHO LINK ---
+:connectsNode rdf:type owl:ObjectProperty ;
+              rdfs:domain :Link ;
+              rdfs:range :Server ;
+              rdfs:comment "Indicates which servers are connected by this link." .
+
+
+#################################################################
+#    Data Properties
+#################################################################
+
+# Server Properties
+:hasAvailableCPU rdf:type owl:DatatypeProperty ;
+                 rdfs:domain :Server ;
+                 rdfs:range xsd:integer .
+
+:hasHardwareAccel rdf:type owl:DatatypeProperty ;
+                  rdfs:domain :Server ;
+                  rdfs:range xsd:boolean .
+
+# Link Properties (Bổ sung theo yêu cầu R3)
+:hasLinkBandwidth rdf:type owl:DatatypeProperty ;
+                  rdfs:domain :Link ;
+                  rdfs:range xsd:integer .
+
+:hasLinkLatency rdf:type owl:DatatypeProperty ;
+                rdfs:domain :Link ;
+                rdfs:range xsd:integer .
+
+# VNF Properties
+:requiresCPU rdf:type owl:DatatypeProperty ;
+             rdfs:domain :VNF ;
+             rdfs:range xsd:integer .
+
+:requiresLatency rdf:type owl:DatatypeProperty ;
+                 rdfs:domain :VNF ;
+                 rdfs:range xsd:integer .
+
+:requiresHardwareAccel rdf:type owl:DatatypeProperty ;
+                       rdfs:domain :VNF ;
+                       rdfs:range xsd:boolean .
