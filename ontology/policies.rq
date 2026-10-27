@@ -1,0 +1,74 @@
+# Policy rules P1-P7 of the nfv-infra ontology (executable SPARQL CONSTRUCT form).
+# Evaluated by semvnf/kb.py after the OWL 2 RL closure; each query concludes isIncompatibleWith(?n, ?v).
+
+# ---- latency
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :LowLatencyVNF ; :requiresMaxAccessLatency ?lr .
+        ?n a :Server . ?n :locatedInZone ?z . ?z :hasAccessLatency ?la .
+        FILTER (?la > ?lr) }
+
+# ---- capability
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :HardwareAcceleratedVNF ; :requiresCapability ?c .
+        ?n a :Server . ?n :lacksValidatedCapability ?c . }
+
+# ---- trust
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :VNF . ?v :requiresTrustLevel ?tr .
+        ?n a :Server . ?n :belongsToSecurityDomain ?d . ?d :hasTrustLevel ?tn .
+        FILTER (?tn < ?tr) }
+
+# ---- isolation
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        { ?v a :IsolatedVNF .
+           ?n a :Server . ?n :hasResourceState ?s . ?s :isValidated true ; :hasActiveTenantCount ?k .
+           FILTER (?k > 0) }
+        UNION
+        { ?v a :VNF . ?v :partOfChain ?c .
+           ?n a :Server . ?n :hasResourceState ?s . ?s :isValidated true ; :hasExclusiveTenant true . } }
+
+# ---- opstate
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :VNF . ?v :partOfChain ?c .
+        ?n a :Server . ?n :hasOperationalState :Unavailable . }
+
+# ---- headroom
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :MissionCriticalVNF .
+        ?n a :Server . ?n :hasResourceState ?s . ?s :isValidated true ; :hasUtilization ?u .
+        FILTER (?u > 0.8) }
+
+# ---- carbon
+PREFIX : <http://example.org/nfv-infra#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :GreenVNF ; :requiresMaxCarbonIntensity ?cm .
+        ?n a :Server . ?n :locatedInZone ?z . ?z :hasCarbonObservation ?o .
+        ?o :isValidated true ; :hasCarbonIntensity ?ci .
+        FILTER (?ci > ?cm) }

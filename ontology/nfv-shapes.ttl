@@ -1,0 +1,54 @@
+@prefix :     <http://example.org/nfv-infra#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# SHACL shapes used by the validation stage (Section 3.3.3).  Observations of a server or
+# zone are marked :isValidated only if their focus node conforms and is fresh.
+
+:ServerShape a sh:NodeShape ;
+    sh:targetClass :EdgeServer, :CoreServer ;
+    sh:property [ sh:path :locatedInZone ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path :belongsToSecurityDomain ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path :hasEnergyProfile ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path :hasOperationalState ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path :hasCPUCapacity ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minExclusive 0 ] ;
+    sh:property [ sh:path :hasMemoryCapacity ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minExclusive 0 ] .
+
+:ResourceStateShape a sh:NodeShape ;
+    sh:targetClass :ResourceStateObservation ;
+    sh:property [ sh:path :hasAvailableCPU ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
+    sh:property [ sh:path :hasAvailableMemory ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
+    sh:property [ sh:path :hasUtilization ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxInclusive 1 ] ;
+    sh:property [ sh:path :hasActiveTenantCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:nonNegativeInteger ] ;
+    sh:property [ sh:path :hasExclusiveTenant ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:boolean ] ;
+    sh:property [ sh:path :hasObservationTime ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+
+:CarbonObservationShape a sh:NodeShape ;
+    sh:targetClass :CarbonIntensityObservation ;
+    sh:property [ sh:path :hasCarbonIntensity ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
+    sh:property [ sh:path :hasObservationTime ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+
+:LinkShape a sh:NodeShape ;
+    sh:targetClass :SubstrateLink ;
+    sh:property [ sh:path :hasSourceNode ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path :hasDestinationNode ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path :hasBandwidthCapacity ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minExclusive 0 ] ;
+    sh:property [ sh:path :hasAvailableBandwidth ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
+    sh:property [ sh:path :hasPropagationLatency ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] .
+
+:ZoneShape a sh:NodeShape ;
+    sh:targetClass :GeographicalZone ;
+    sh:property [ sh:path :hasAccessLatency ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] .
+
+:EnergyProfileShape a sh:NodeShape ;
+    sh:targetClass :EnergyProfile ;
+    sh:property [ sh:path :hasIdlePower ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] ;
+    sh:property [ sh:path :hasMaximumPower ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ] .
+
+:VNFShape a sh:NodeShape ;
+    sh:targetSubjectsOf :partOfChain ;
+    sh:property [ sh:path :requiresCPU ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minExclusive 0 ] ;
+    sh:property [ sh:path :requiresMemory ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:decimal ; sh:minExclusive 0 ] ;
+    sh:property [ sh:path :requiresTrustLevel ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ] ;
+    sh:property [ sh:path :hasChainPosition ; sh:minCount 1 ; sh:maxCount 1 ] .
