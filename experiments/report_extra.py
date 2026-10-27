@@ -665,6 +665,7 @@ def e7(R):
                 if (t, rt, kind) in g:
                     pa = _e7_stats(g[(t, rt, kind)])
                     R.m(f"e7b/{t}/{kind}/{rt:g}/dacc_vs_permit", acc - pa[3], "{:+.1f}")
+                    R.m(f"e7b/{t}/{kind}/{rt:g}/dacc_vs_permit/abs", abs(acc - pa[3]))
             if not pts:
                 continue
             P = np.array(pts)

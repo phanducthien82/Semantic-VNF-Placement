@@ -58,6 +58,8 @@ class Report:
             s = value
         else:
             s = fmt.format(value)
+        if re.match(r"^[+-]\d", s):          # typographic sign (math minus instead of a hyphen)
+            s = "\\ensuremath{" + s[0] + "}" + s[1:]
         self.macros[key] = s
 
     def write_macros(self):
@@ -307,7 +309,15 @@ def main():
     for fn in EXTRA:
         fn(R)
     R.write_macros()
-    print(f"{len(R.macros)} macros written")
+    # signs in the generated tables: math minus/plus instead of hyphen/plus characters
+    n_tab = 0
+    for t in sorted((R.tex / "tables").glob("tab_*.tex")):
+        body = t.read_text(encoding="utf-8")
+        new = re.sub(r"(?<![\w$\\.-])([+-])(?=\d)", lambda m: "$" + m.group(1).replace("-", "-") + "$", body)
+        if new != body:
+            t.write_text(new, encoding="utf-8")
+            n_tab += 1
+    print(f"{len(R.macros)} macros written; signs typeset in {n_tab} tables")
 
 
 if __name__ == "__main__":
