@@ -40,6 +40,23 @@ pip install -r requirements.txt
 Tested with Python 3.11.9, NumPy 2.4.6, SciPy 1.17.1 (HiGHS), NetworkX 3.6.1, rdflib 7.6.0, owlrl 7.6.2,
 pySHACL 0.40.1, PyTorch 2.14.1 (CPU), Matplotlib 3.11.2. Gurobi is optional (cross-check only).
 
+## Rule compiler
+
+The online simulator does not transcribe the policy rules by hand. `semvnf/compiler.py` parses the
+SPARQL CONSTRUCT rules of `ontology/policies.rq` (the same file that the reference RDF/OWL pipeline
+in `semvnf/kb.py` executes) and emits one vectorised NumPy function per rule; `python -m
+semvnf.compiler` prints the emitted code. The supported class is: conjunctive bodies over one server
+and one VNF, optionally combined by `UNION`; joins through the server's zone, security domain,
+capability inventory, operational state and validated observations; identity joins through shared
+individuals (capabilities); `FILTER` comparisons between bound values and constants or VNF-specific
+thresholds (`&&`, `||`, `!`). Rules outside the class (aggregation, recursion, negation as failure,
+several VNFs or servers) are rejected at compile time with `UnsupportedRule`. The only hand-written
+part is the schema binding `SERVER_PATHS` / `VNF_PROPS` (ontology property paths -> arrays of the
+knowledge view). Unknown attributes are handled by the three-valued semantics (`unknown="permit"`,
+default) or conservatively (`unknown="deny"`). `tests/test_core.py` checks the emitted predicates
+against the RDF/OWL pipeline, against a manual transcription of P1-P7 (`tests/reference_rules.py`)
+on random knowledge views, and that rules outside the class are rejected.
+
 ## Reproducing the paper
 
 All scripts are resumable; each run appends one JSON line to `results/<experiment>/runs.jsonl`.
@@ -70,6 +87,10 @@ DRL training 1000+.
 History of the result files: the DRL step reward first lacked the headroom term of the objective; after the
 correction the agents were re-trained and their E1/E1-F runs repeated (`drop_runs.py`, `run_queue_drl.sh`).
 The superseded runs are kept locally as `runs.jsonl.bak-*` (not part of the release).
+When the rule compiler replaced the hand-written predicates (version 2 of the revision), the experiments that
+measure the compiled-rule time or perform the RDF equivalence check were re-run with the generated predicates:
+the Semantic-ILP runs of E1 (which carry the E0 check), E5 and E1-T. The generated predicates are identical to
+the hand-written ones (tests/test_core.py), so all decisions and all other results are unchanged.
 
 ## Licence
 

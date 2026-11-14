@@ -751,14 +751,16 @@ def e8(R):
                     pe = paired([cm[s]["energy_per_acc_wh"] for s in sd], [bm[s]["energy_per_acc_wh"] for s in sd])
                     pl = paired([cm[s]["latency"] for s in sd], [bm[s]["latency"] for s in sd])
                     pa = paired([cm[s]["acceptance"] for s in sd], [bm[s]["acceptance"] for s in sd])
-                    b_co = float(np.mean([bm[s]["carbon_per_acc_g"] for s in sd]))
-                    b_en = float(np.mean([bm[s]["energy_per_acc_wh"] for s in sd]))
-                    b_lat = float(np.mean([bm[s]["latency"] for s in sd]))
-                    b_acc = 100 * float(np.mean([bm[s]["acceptance"] for s in sd]))
-                    v_co = 100 * (float(np.mean([cm[s]["carbon_per_acc_g"] for s in sd])) - b_co) / b_co
-                    v_en = 100 * (float(np.mean([cm[s]["energy_per_acc_wh"] for s in sd])) - b_en) / b_en
-                    v_lat = 100 * (float(np.mean([cm[s]["latency"] for s in sd])) - b_lat) / b_lat
-                    v_acc = 100 * float(np.mean([cm[s]["acceptance"] for s in sd])) - b_acc
+                    # relative changes from the means rounded as displayed in the table (verifiable by the reader)
+                    rd = lambda key, rows, nd, sc=1.0: round(sc * float(np.mean([rows[s][key] for s in sd])), nd)
+                    b_co, c_co = rd("carbon_per_acc_g", bm, 2), rd("carbon_per_acc_g", cm, 2)
+                    b_en, c_en = rd("energy_per_acc_wh", bm, 2), rd("energy_per_acc_wh", cm, 2)
+                    b_lat, c_lat = rd("latency", bm, 1), rd("latency", cm, 1)
+                    b_acc, c_acc = rd("acceptance", bm, 1, 100.0), rd("acceptance", cm, 1, 100.0)
+                    v_co = 100 * (c_co - b_co) / b_co
+                    v_en = 100 * (c_en - b_en) / b_en
+                    v_lat = 100 * (c_lat - b_lat) / b_lat
+                    v_acc = c_acc - b_acc
                     dco = f"{v_co:+.1f}{pstars(pr['p_wilcoxon'])}"
                     den = f"{v_en:+.1f}{pstars(pe['p_wilcoxon'])}"
                     dlat = f"{v_lat:+.1f}{pstars(pl['p_wilcoxon'])}"
@@ -783,7 +785,7 @@ def e8(R):
             b, c = g.get((t, a, 0.0)), g.get((t, a, 0.5))
             if b and c:
                 for tpl, key in (("mIoT", "miot"), ("URLLC", "urllc")):
-                    x0, x1 = ci_of(b, tpl), ci_of(c, tpl)
+                    x0, x1 = round(ci_of(b, tpl)), round(ci_of(c, tpl))      # as displayed (g/kWh, integers)
                     if np.isfinite(x0) and x0 > 0:
                         R.m(f"e8/{t}/{a}/dci_{key}", 100 * (x1 - x0) / x0, "{:+.1f}")
                         R.m(f"e8/{t}/{a}/dci_{key}/abs", abs(100 * (x1 - x0) / x0))

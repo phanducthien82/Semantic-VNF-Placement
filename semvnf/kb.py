@@ -18,6 +18,7 @@ import numpy as np
 from rdflib import RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 
 from .catalog import CAPABILITIES
+from .compiler import PREFIX, RULE_TEXTS
 from .rules import POLICIES, KnowledgeView
 
 ONTO_DIR = Path(__file__).resolve().parents[1] / "ontology"
@@ -25,46 +26,9 @@ NFV = Namespace("http://example.org/nfv-infra#")
 EPOCH0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 FRESHNESS_S = 30.0
 
-PREFIX = """PREFIX : <http://example.org/nfv-infra#>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-"""
-ISVNF = "?v a :VNF ."
-ISSRV = "?n a :Server ."
-
-RULES = {
-    "latency": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        ?v a :LowLatencyVNF ; :requiresMaxAccessLatency ?lr .
-        {ISSRV} ?n :locatedInZone ?z . ?z :hasAccessLatency ?la .
-        FILTER (?la > ?lr) }}""",
-    "capability": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        ?v a :HardwareAcceleratedVNF ; :requiresCapability ?c .
-        {ISSRV} ?n :lacksValidatedCapability ?c . }}""",
-    "trust": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        {ISVNF} ?v :requiresTrustLevel ?tr .
-        {ISSRV} ?n :belongsToSecurityDomain ?d . ?d :hasTrustLevel ?tn .
-        FILTER (?tn < ?tr) }}""",
-    "isolation": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        {{ ?v a :IsolatedVNF .
-           {ISSRV} ?n :hasResourceState ?s . ?s :isValidated true ; :hasActiveTenantCount ?k .
-           FILTER (?k > 0) }}
-        UNION
-        {{ {ISVNF} ?v :partOfChain ?c .
-           {ISSRV} ?n :hasResourceState ?s . ?s :isValidated true ; :hasExclusiveTenant true . }} }}""",
-    "opstate": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        {ISVNF} ?v :partOfChain ?c .
-        {ISSRV} ?n :hasOperationalState :Unavailable . }}""",
-    "headroom": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        ?v a :MissionCriticalVNF .
-        {ISSRV} ?n :hasResourceState ?s . ?s :isValidated true ; :hasUtilization ?u .
-        FILTER (?u > 0.8) }}""",
-    "carbon": f"""CONSTRUCT {{ ?n :isIncompatibleWith ?v }} WHERE {{
-        ?v a :GreenVNF ; :requiresMaxCarbonIntensity ?cm .
-        {ISSRV} ?n :locatedInZone ?z . ?z :hasCarbonObservation ?o .
-        ?o :isValidated true ; :hasCarbonIntensity ?ci .
-        FILTER (?ci > ?cm) }}""",
-}
+# The policy rules are read from ontology/policies.rq (one source for the reference pipeline and
+# for the compiled predicates of the online simulator).
+RULES = RULE_TEXTS
 
 EXTRACT_ISEM = PREFIX + """SELECT ?n ?v WHERE { ?n :isIncompatibleWith ?v . }"""
 EXTRACT_SERVERS = PREFIX + """SELECT ?n ?cpu ?mem ?acpu ?amem ?pi ?pm WHERE {
@@ -200,7 +164,16 @@ def build_abox(sub, kv: KnowledgeView, reqs, now: float = 0.0) -> Graph:
 
 
 def validate(g: Graph, now: float, use_shacl: bool = True) -> dict:
-    """SHACL validation + freshness; marks conforming fresh observations with :isValidated true."""
+    """SHACL validation + freshness; marks conforming fresh observations with :isValidated true.
+
+    SHACL is the primary guard against structurally invalid descriptions (e.g. two values of a
+    single-valued property): OWL does not adopt the unique-name assumption, so two values of a
+    functional object property are not an inconsistency for the OWL 2 RL rules (prp-fp infers
+    owl:sameAs instead).  An observation whose focus node violates a shape is not validated; any
+    other individual that violates a shape (server, zone, link, energy profile, VNF) is *withheld*
+    from the rule evaluation, i.e. its assertions (except rdf:type) are removed, so that the pairs
+    that involve it are "unknown" in the sense of the three-valued semantics.
+    """
     bad = set()
     conforms = True
     if use_shacl:
@@ -212,31 +185,46 @@ def validate(g: Graph, now: float, use_shacl: bool = True) -> dict:
             fn = report_g.value(res, SH.focusNode)
             if fn is not None:
                 bad.add(fn)
+    observations = set(g.subjects(RDF.type, NFV.ResourceStateObservation)) | set(
+        g.subjects(RDF.type, NFV.CarbonIntensityObservation))
+    withheld = 0
+    for f in bad - observations:
+        for t in list(g.triples((f, None, None))):
+            if t[1] != RDF.type:
+                g.remove(t)
+        withheld += 1
     limit = EPOCH0 + timedelta(seconds=float(now) - FRESHNESS_S)
     n_val = 0
-    for o in list(g.subjects(RDF.type, NFV.ResourceStateObservation)) + list(g.subjects(RDF.type, NFV.CarbonIntensityObservation)):
+    for o in observations:
         t = g.value(o, NFV.hasObservationTime)
         ok = o not in bad and t is not None and t.toPython() >= limit
         if ok:
             g.add((o, NFV.isValidated, Literal(True)))
             n_val += 1
-    return dict(conforms=bool(conforms), n_violations=len(bad), n_validated=n_val)
+    return dict(conforms=bool(conforms), n_violations=len(bad), n_validated=n_val, n_withheld=withheld)
 
 
 def closure(g: Graph, mode: str = "owlrl") -> dict:
-    """OWL 2 RL (or RDFS) deductive closure of TBox + ABox, in place."""
-    import owlrl
+    """OWL 2 RL (or RDFS) deductive closure of TBox + ABox, in place.
+
+    Inconsistencies found by the OWL 2 RL rules (disjoint classes with a common individual,
+    owl:sameAs between individuals declared owl:differentFrom, ...) are reported by owlrl as error
+    messages, not as triples; they are returned in ``errors``.
+    """
     before = len(g)
     for t in tbox():
         g.add(t)
     if mode == "owlrl":
-        owlrl.DeductiveClosure(owlrl.OWLRL_Semantics, axiomatic_triples=False, datatype_axioms=False).expand(g)
+        from owlrl.OWLRL import OWLRL_Semantics
+        cl = OWLRL_Semantics(g, False, False, rdfs=False)
     elif mode == "rdfs":
-        owlrl.DeductiveClosure(owlrl.RDFS_Semantics, axiomatic_triples=False, datatype_axioms=False).expand(g)
-    # OWL-RL inconsistency: individuals typed owl:Nothing
-    from rdflib import OWL
-    inconsistent = len(list(g.subjects(RDF.type, OWL.Nothing)))
-    return dict(triples_before=before, triples_after=len(g), inconsistent=inconsistent)
+        from owlrl.RDFSClosure import RDFS_Semantics
+        cl = RDFS_Semantics(g, False, False, rdfs=True)
+    else:
+        return dict(triples_before=before, triples_after=len(g), inconsistent=0, errors=[])
+    cl.closure()
+    errors = list(cl.error_messages)
+    return dict(triples_before=before, triples_after=len(g), inconsistent=len(errors), errors=errors)
 
 
 def apply_rules(g: Graph, enabled=POLICIES, timing: dict | None = None) -> dict:
@@ -282,15 +270,17 @@ def run_pipeline(sub, kv: KnowledgeView, reqs, now: float = 0.0, enabled=POLICIE
     abox_triples = len(g)
     val = validate(g, now, use_shacl=use_shacl)
     t2 = time.perf_counter()
-    cl = closure(g, closure_mode) if closure_mode != "none" else dict(triples_after=len(g), inconsistent=0)
+    cl = closure(g, closure_mode) if closure_mode != "none" else dict(triples_after=len(g), inconsistent=0, errors=[])
     t3 = time.perf_counter()
     rule_t = {}
     per = apply_rules(g, enabled, rule_t)
     t4 = time.perf_counter()
     isem, params = extract(g, reqs, sub.n)
+    if cl["inconsistent"]:      # an inconsistent epoch is not used for pruning (Section 3.4.1)
+        isem = {k: np.zeros_like(v) for k, v in isem.items()}
     t5 = time.perf_counter()
     return dict(isem=isem, per_policy={k: len(v) for k, v in per.items()}, rule_time=rule_t, abox_triples=abox_triples,
                 tbox_triples=len(tbox()), closure_triples=cl["triples_after"], inconsistent=cl["inconsistent"],
-                validation=val, params=params,
+                errors=cl["errors"], validation=val, params=params,
                 t_abox=t1 - t0, t_validate=t2 - t1, t_closure=t3 - t2, t_rules=t4 - t3, t_extract=t5 - t4,
                 t_total=t5 - t0)

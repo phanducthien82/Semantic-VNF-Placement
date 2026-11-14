@@ -201,8 +201,12 @@ def e1(R: Report, exp="e1_online", tag="e1"):
                 if (t, a) not in g or (t, ref) not in g or a == ref:
                     continue
                 for key in ("energy_per_acc_wh", "carbon_per_acc_g", "latency", "acceptance", "energy_kwh"):
-                    mr = np.mean([r[key] for r in g[(t, ref)]])
-                    mo = np.mean([r[key] for r in g[(t, a)]])
+                    # means rounded as displayed in the main table (1 decimal for ratios, 2 otherwise), so that
+                    # the differences quoted in the text can be verified from the table
+                    nd_key = 1 if key in ("acceptance", "mc_exposure", "util_active", "active_servers") else 2
+                    scale = 100.0 if key in ("acceptance", "mc_exposure", "util_active") else 1.0
+                    mr = round(scale * float(np.mean([r[key] for r in g[(t, ref)]])), nd_key) / scale
+                    mo = round(scale * float(np.mean([r[key] for r in g[(t, a)]])), nd_key) / scale
                     if key == "acceptance":
                         R.m(f"{tag}/{t}/{ref}-vs-{a}/{key}/pp", 100 * (mr - mo), "{:+.1f}")
                         R.m(f"{tag}/{t}/{ref}-vs-{a}/{key}/pp/abs", abs(100 * (mr - mo)), "{:.1f}")
@@ -298,7 +302,7 @@ def e0(R: Report):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tex", default=str(ROOT.parents[1] / "Latex" / "version-1"))
+    ap.add_argument("--tex", default=str(ROOT.parents[1] / "Latex" / "version-2"))
     a = ap.parse_args()
     R = Report(Path(a.tex))
     tbox_stats(R)

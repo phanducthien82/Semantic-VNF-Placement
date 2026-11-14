@@ -13,6 +13,10 @@ from semvnf.rules import incompatibility, view_from_substrate  # noqa: E402
 from semvnf.substrate import make_substrate  # noqa: E402
 from semvnf.topology import load_topology  # noqa: E402
 from semvnf.workload import WorkloadConfig, generate_trace  # noqa: E402
+from semvnf.rules import POLICIES, evaluate_policies  # noqa: E402
+from semvnf import compiler  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from reference_rules import evaluate_policies_manual  # noqa: E402
 
 
 def _loaded(name="euro28", seed=3):
@@ -104,3 +108,109 @@ if __name__ == "__main__":
         if name.startswith("test_"):
             fn()
             print("ok", name)
+
+
+def test_compiled_rules_equal_manual_reference():
+    """The predicates generated from policies.rq agree with the hand-written transcription of
+    P1-P7 on random knowledge views, in the default and in the conservative mode."""
+    rng = np.random.default_rng(1)
+    checked = 0
+    for name, seed in (("euro28", 1), ("germany50", 2)):
+        sub = _loaded(name, seed)
+        trace = generate_trace(sub, seed, WorkloadConfig(n_arrivals=30))
+        for _ in range(4):
+            kv = view_from_substrate(sub)
+            kv.state_known &= rng.random(sub.n) > 0.3
+            kv.inv_valid &= rng.random(sub.n) > 0.3
+            kv.ci_known &= rng.random(sub.n) > 0.3
+            kv.util = rng.uniform(0, 1, sub.n)
+            kv.trust = rng.integers(1, 4, sub.n)
+            for r in trace:
+                for mode in ("permit", "deny"):
+                    a = evaluate_policies(r.vnfs, kv, POLICIES, mode)
+                    b = evaluate_policies_manual(r.vnfs, kv, POLICIES, mode)
+                    for pol in POLICIES:
+                        assert np.array_equal(a[pol], b[pol]), (name, r.sfc_id, pol, mode)
+                        checked += 1
+    assert checked > 1000
+
+
+def test_compiler_rejects_rules_outside_the_class():
+    """Rules outside the supported class are rejected at compile time, not silently mis-compiled."""
+    bad = {
+        "two_vnfs": """CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+            ?v a :VNF ; :partOfChain ?c . ?w a :VNF ; :partOfChain ?c . ?n a :Server .
+            ?n :hostsVNF ?w . }""",
+        "aggregate": """CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+            ?v a :VNF . ?n a :Server . ?n :locatedInZone ?z .
+            { SELECT ?z (COUNT(?m) AS ?k) WHERE { ?m :locatedInZone ?z } GROUP BY ?z }
+            FILTER (?k > 3) }""",
+        "unbound_path": """CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+            ?v a :VNF . ?n a :Server . ?n :hasEnergyProfile ?e . ?e :hasIdlePower ?p . FILTER (?p > 100) }""",
+    }
+    for name, text in bad.items():
+        try:
+            compiler.Program({name: text})
+        except compiler.UnsupportedRule:
+            continue
+        raise AssertionError(f"rule {name} should have been rejected")
+    # a new rule inside the class compiles without any code change
+    extra = """CONSTRUCT { ?n :isIncompatibleWith ?v } WHERE {
+        ?v a :MissionCriticalVNF . ?n a :Server . ?n :belongsToSecurityDomain ?d . ?d :hasTrustLevel ?t .
+        ?n :hasResourceState ?s . ?s :isValidated true ; :hasUtilization ?u .
+        FILTER (?t < 2 && ?u > 0.5) }"""
+    prog = compiler.Program({"mc_trust": extra})
+    sub = _loaded()
+    kv = view_from_substrate(sub)
+    trace = generate_trace(sub, 3, WorkloadConfig(n_arrivals=5))
+    for r in trace:
+        m = prog.evaluate(r.vnfs, kv, ("mc_trust",))["mc_trust"]
+        mc = np.array(["MissionCriticalVNF" in v.classes for v in r.vnfs])
+        expect = mc[:, None] & ((kv.trust < 2) & kv.state_known & (kv.util > 0.5))[None, :]
+        assert np.array_equal(m, expect)
+
+
+def test_shacl_guards_functional_object_properties():
+    """Two values of a functional object property are not an OWL 2 RL inconsistency (no unique-name
+    assumption); the SHACL cardinality constraint withholds the server from the rule evaluation.
+    Two operational states, which are declared owl:differentFrom, are an inconsistency."""
+    from rdflib import OWL
+    sub = _loaded()
+    trace = generate_trace(sub, 3, WorkloadConfig(n_arrivals=4))
+    kv = view_from_substrate(sub)
+    zones = sorted(set(int(z) for z in sub.zone))
+    j = 0
+    other = next(z for z in zones if z != int(sub.zone[j]))
+    # (a) a second zone for server 0, no SHACL: the OWL 2 RL closure infers sameAs, no error
+    g = kb.build_abox(sub, kv, trace, now=50.0)
+    g.add((kb.NFV[f"s{j}"], kb.NFV.locatedInZone, kb.NFV[f"z{other}"]))
+    kb.validate(g, 50.0, use_shacl=False)
+    cl = kb.closure(g)
+    assert cl["inconsistent"] == 0
+    assert (kb.NFV[f"z{int(sub.zone[j])}"], OWL.sameAs, kb.NFV[f"z{other}"]) in g
+    # (b) with SHACL the server is withheld: no rule can conclude anything about it
+    res = kb.run_pipeline(sub, kv, trace, now=50.0)
+    g2 = kb.build_abox(sub, kv, trace, now=50.0)
+    g2.add((kb.NFV[f"s{j}"], kb.NFV.locatedInZone, kb.NFV[f"z{other}"]))
+    val = kb.validate(g2, 50.0)
+    assert not val["conforms"] and val["n_withheld"] >= 1
+    kb.closure(g2)
+    kb.apply_rules(g2)
+    isem, _ = kb.extract(g2, trace, sub.n)
+    for r in trace:
+        assert not isem[r.sfc_id][:, j].any()
+        ref = res["isem"][r.sfc_id].copy()
+        ref[:, j] = False
+        assert np.array_equal(isem[r.sfc_id], ref)
+    # (c) two operational states: Available and Unavailable are declared different -> inconsistency
+    g3 = kb.build_abox(sub, kv, trace, now=50.0)
+    g3.add((kb.NFV[f"s{j}"], kb.NFV.hasOperationalState, kb.NFV.Unavailable))
+    kb.validate(g3, 50.0, use_shacl=False)
+    cl3 = kb.closure(g3)
+    assert cl3["inconsistent"] >= 1
+    # (d) disjoint classes with a common individual are an inconsistency as well
+    g4 = kb.build_abox(sub, kv, trace, now=50.0)
+    g4.add((kb.NFV[f"s{j}"], kb.kb_RDF_TYPE if hasattr(kb, "kb_RDF_TYPE") else __import__("rdflib").RDF.type,
+            kb.NFV.CoreServer if not sub.core[j] else kb.NFV.EdgeServer))
+    kb.validate(g4, 50.0, use_shacl=False)
+    assert kb.closure(g4)["inconsistent"] >= 1
