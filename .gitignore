@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+results/*.log
+results/summary/*.png
+.ipynb_checkpoints/
+results/*/runs.jsonl.bak-*
+results/*.out
+results/*.err

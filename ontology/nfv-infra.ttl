@@ -1,0 +1,113 @@
+@prefix :     <http://example.org/nfv-infra#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+#################################################################
+# nfv-infra ontology, version 2.0 (revision of COMNET-D-26-06541)
+#
+# TBox restricted to OWL 2 RL constructs: class and property hierarchies,
+# domains/ranges, functional properties, disjointness.  No disjunction,
+# no existential quantification on the right-hand side.  Placement policies
+# are DL-safe Horn rules (rules/policies.rq, equivalently rules/policies.swrl)
+# whose only conclusion is the pairwise relation :isIncompatibleWith.
+#
+# Modelling principle (reply to Reviewer 1, comment 5):
+#  * static, qualitative features shared between servers and VNFs are
+#    individuals (HardwareCapability, SecurityDomain, GeographicalZone);
+#  * time-varying quantities that policy rules evaluate and that must pass a
+#    freshness check are time-stamped observations (SOSA-style pattern):
+#    ResourceStateObservation (server telemetry) and
+#    CarbonIntensityObservation (grid carbon intensity);
+#  * static capacities and optimisation-only parameters are direct data
+#    properties of the entity they describe (Server, SubstrateLink, VNF).
+#################################################################
+
+<http://example.org/nfv-infra> a owl:Ontology ;
+    owl:versionInfo "2.0" ;
+    dcterms:title "nfv-infra: knowledge graph for semantic-aware VNF placement" ;
+    rdfs:comment "Revised ontology; the deprecated unary class IncompatibleNode of v1.0 is replaced by the pairwise property isIncompatibleWith." .
+
+######################## Classes ################################
+:Server a owl:Class ; rdfs:comment "Substrate compute node (one server per substrate site)." .
+:EdgeServer a owl:Class ; rdfs:subClassOf :Server ; rdfs:comment "Server at an edge/MEC site." .
+:CoreServer a owl:Class ; rdfs:subClassOf :Server ; rdfs:comment "Server at a core/cloud site." .
+:EdgeServer owl:disjointWith :CoreServer .
+
+:SubstrateLink a owl:Class ; rdfs:comment "Directed physical arc between two servers (full-duplex links are two arcs)." .
+
+:ServiceFunctionChain a owl:Class ; rdfs:comment "SFC request: ordered VNFs between an ingress and an egress server." .
+:VNF a owl:Class ; rdfs:comment "Virtual network function instance of an SFC request." .
+:LowLatencyVNF a owl:Class ; rdfs:subClassOf :VNF ; rdfs:comment "VNF with a maximum admissible access latency." .
+:HardwareAcceleratedVNF a owl:Class ; rdfs:subClassOf :VNF ; rdfs:comment "VNF requiring a hardware capability." .
+:MissionCriticalVNF a owl:Class ; rdfs:subClassOf :VNF ; rdfs:comment "VNF that must not be placed on servers above the utilisation safety margin." .
+:IsolatedVNF a owl:Class ; rdfs:subClassOf :VNF ; rdfs:comment "VNF requiring a server without other tenants (exclusive tenancy)." .
+:GreenVNF a owl:Class ; rdfs:subClassOf :VNF ; rdfs:comment "VNF with a maximum admissible grid carbon intensity." .
+:DelayTolerantVNF a owl:Class ; rdfs:subClassOf :VNF ; rdfs:comment "VNF of a delay-tolerant slice; enters only the objective (no hard rule)." .
+
+:GeographicalZone a owl:Class ; rdfs:comment "Geographical/administrative zone (region x site tier)." .
+:SecurityDomain a owl:Class ; rdfs:comment "Security/trust domain with an ordered trust level." .
+:HardwareCapability a owl:Class ; rdfs:comment "Hardware feature (GPU, SmartNIC, CryptoAccel)." .
+:EnergyProfile a owl:Class ; rdfs:comment "Idle/maximum power characteristics of a server." .
+:OperationalState a owl:Class ; rdfs:comment "Operational state of a server." .
+:Observation a owl:Class ; rdfs:comment "Time-stamped measurement." .
+:ResourceStateObservation a owl:Class ; rdfs:subClassOf :Observation ; rdfs:comment "Server telemetry (residual resources, utilisation, tenancy)." .
+:CarbonIntensityObservation a owl:Class ; rdfs:subClassOf :Observation ; rdfs:comment "Grid carbon intensity of a zone." .
+
+:GPU a :HardwareCapability .
+:SmartNIC a :HardwareCapability .
+:CryptoAccel a :HardwareCapability .
+:Available a :OperationalState .
+:Unavailable a :OperationalState .
+:Available owl:differentFrom :Unavailable .
+
+######################## Object properties #####################
+:locatedInZone a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range :GeographicalZone .
+:belongsToSecurityDomain a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range :SecurityDomain .
+:hasCapability a owl:ObjectProperty ; rdfs:domain :Server ; rdfs:range :HardwareCapability .
+:lacksValidatedCapability a owl:ObjectProperty ; rdfs:domain :Server ; rdfs:range :HardwareCapability ;
+    rdfs:comment "Asserted by inventory validation only (closed-world fact for a validated capability dimension)." .
+:requiresCapability a owl:ObjectProperty ; rdfs:domain :VNF ; rdfs:range :HardwareCapability .
+:hasSourceNode a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :SubstrateLink ; rdfs:range :Server .
+:hasDestinationNode a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :SubstrateLink ; rdfs:range :Server .
+:hasEnergyProfile a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range :EnergyProfile .
+:hasOperationalState a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range :OperationalState .
+:hasResourceState a owl:ObjectProperty ; rdfs:domain :Server ; rdfs:range :ResourceStateObservation .
+:hasCarbonObservation a owl:ObjectProperty ; rdfs:domain :GeographicalZone ; rdfs:range :CarbonIntensityObservation .
+:partOfChain a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :VNF ; rdfs:range :ServiceFunctionChain .
+:hasIngress a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :ServiceFunctionChain ; rdfs:range :Server .
+:hasEgress a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain :ServiceFunctionChain ; rdfs:range :Server .
+:isIncompatibleWith a owl:ObjectProperty ; rdfs:domain :Server ; rdfs:range :VNF ;
+    rdfs:comment "Inferred only: server violates at least one validated hard policy of the VNF." .
+
+######################## Data properties #######################
+:hasCPUCapacity a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range xsd:decimal .
+:hasMemoryCapacity a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range xsd:decimal .
+:hasProcessingFactor a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :Server ; rdfs:range xsd:decimal .
+:hasAvailableCPU a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ResourceStateObservation ; rdfs:range xsd:decimal .
+:hasAvailableMemory a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ResourceStateObservation ; rdfs:range xsd:decimal .
+:hasUtilization a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ResourceStateObservation ; rdfs:range xsd:decimal .
+:hasActiveTenantCount a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ResourceStateObservation ; rdfs:range xsd:nonNegativeInteger .
+:hasExclusiveTenant a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ResourceStateObservation ; rdfs:range xsd:boolean .
+:hasObservationTime a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :Observation ; rdfs:range xsd:dateTime .
+:isValidated a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :Observation ; rdfs:range xsd:boolean ;
+    rdfs:comment "Set by the validation stage (SHACL shapes + freshness window)." .
+:hasTrustLevel a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :SecurityDomain ; rdfs:range xsd:integer .
+:hasAccessLatency a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :GeographicalZone ; rdfs:range xsd:decimal ; rdfs:comment "ms" .
+:hasBandwidthCapacity a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :SubstrateLink ; rdfs:range xsd:decimal ; rdfs:comment "Mbps" .
+:hasAvailableBandwidth a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :SubstrateLink ; rdfs:range xsd:decimal ; rdfs:comment "Mbps" .
+:hasPropagationLatency a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :SubstrateLink ; rdfs:range xsd:decimal ; rdfs:comment "ms" .
+:hasIdlePower a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :EnergyProfile ; rdfs:range xsd:decimal ; rdfs:comment "W" .
+:hasMaximumPower a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :EnergyProfile ; rdfs:range xsd:decimal ; rdfs:comment "W" .
+:hasCarbonIntensity a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :CarbonIntensityObservation ; rdfs:range xsd:decimal ; rdfs:comment "gCO2eq/kWh" .
+:requiresCPU a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :VNF ; rdfs:range xsd:decimal .
+:requiresMemory a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :VNF ; rdfs:range xsd:decimal .
+:hasProcessingDelay a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :VNF ; rdfs:range xsd:decimal ; rdfs:comment "ms on a reference (core) server" .
+:hasChainPosition a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :VNF ; rdfs:range xsd:nonNegativeInteger .
+:requiresTrustLevel a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :VNF ; rdfs:range xsd:integer .
+:requiresMaxAccessLatency a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :LowLatencyVNF ; rdfs:range xsd:decimal ; rdfs:comment "ms" .
+:requiresMaxCarbonIntensity a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :GreenVNF ; rdfs:range xsd:decimal ; rdfs:comment "gCO2eq/kWh" .
+:hasBandwidthDemand a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ServiceFunctionChain ; rdfs:range xsd:decimal ; rdfs:comment "Mbps" .
+:hasMaxEndToEndLatency a owl:DatatypeProperty, owl:FunctionalProperty ; rdfs:domain :ServiceFunctionChain ; rdfs:range xsd:decimal ; rdfs:comment "ms (SLA)" .

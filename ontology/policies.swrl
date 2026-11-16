@@ -1,0 +1,38 @@
+# DL-safe SWRL form of the seven policy types (Section 3.3, Eqs. (6)-(12) of the revision).
+# Every rule concludes only the pairwise relation isIncompatibleWith(?n, ?v).
+# The executable form used by the pipeline is the equivalent SPARQL CONSTRUCT set
+# in policies.rq (evaluated by rdflib after the OWL 2 RL closure computed by owlrl).
+# Observations are used only if the validation stage marked them isValidated(true);
+# a pair whose policy attributes are missing or unvalidated is therefore never
+# pruned (three-valued outcome "unknown", Section 3.3.3).
+
+P1 latency:
+  LowLatencyVNF(?v) ^ requiresMaxAccessLatency(?v, ?lr) ^ Server(?n) ^ locatedInZone(?n, ?z)
+  ^ hasAccessLatency(?z, ?la) ^ swrlb:greaterThan(?la, ?lr) -> isIncompatibleWith(?n, ?v)
+
+P2 capability:
+  HardwareAcceleratedVNF(?v) ^ requiresCapability(?v, ?c) ^ Server(?n)
+  ^ lacksValidatedCapability(?n, ?c) -> isIncompatibleWith(?n, ?v)
+
+P3 trust:
+  VNF(?v) ^ requiresTrustLevel(?v, ?tr) ^ Server(?n) ^ belongsToSecurityDomain(?n, ?d)
+  ^ hasTrustLevel(?d, ?tn) ^ swrlb:lessThan(?tn, ?tr) -> isIncompatibleWith(?n, ?v)
+
+P4 isolation (a) isolated VNF needs an empty server:
+  IsolatedVNF(?v) ^ Server(?n) ^ hasResourceState(?n, ?s) ^ isValidated(?s, true)
+  ^ hasActiveTenantCount(?s, ?k) ^ swrlb:greaterThan(?k, 0) -> isIncompatibleWith(?n, ?v)
+P4 isolation (b) exclusive tenancy is respected by every other VNF:
+  VNF(?v) ^ Server(?n) ^ hasResourceState(?n, ?s) ^ isValidated(?s, true)
+  ^ hasExclusiveTenant(?s, true) -> isIncompatibleWith(?n, ?v)
+
+P5 operational state:
+  VNF(?v) ^ Server(?n) ^ hasOperationalState(?n, Unavailable) -> isIncompatibleWith(?n, ?v)
+
+P6 utilisation safety margin (mission-critical VNFs):
+  MissionCriticalVNF(?v) ^ Server(?n) ^ hasResourceState(?n, ?s) ^ isValidated(?s, true)
+  ^ hasUtilization(?s, ?u) ^ swrlb:greaterThan(?u, 0.8) -> isIncompatibleWith(?n, ?v)
+
+P7 carbon:
+  GreenVNF(?v) ^ requiresMaxCarbonIntensity(?v, ?cm) ^ Server(?n) ^ locatedInZone(?n, ?z)
+  ^ hasCarbonObservation(?z, ?o) ^ isValidated(?o, true) ^ hasCarbonIntensity(?o, ?ci)
+  ^ swrlb:greaterThan(?ci, ?cm) -> isIncompatibleWith(?n, ?v)
